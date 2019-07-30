@@ -18,9 +18,18 @@ macro_rules! unwrap {
     };
 }
 
+/// The result of a successful decode pass.
+///
+/// `Complete` is used when the buffer
+/// contained the complete value. `Partial` is used when decoding did not reach
+/// the end of the expected value, but no invalid data was found.
 #[derive(Debug, PartialEq)]
 pub enum Status {
+    /// The completed result.
+    /// 
+    /// Contains the amount of bytes decoded.
     Complete(usize),
+    /// A partial result.
     Partial,
 }
 
@@ -56,14 +65,32 @@ pub struct Head {
     pub rsv: [bool; 3],
 }
 
-#[derive(Default, Debug)]
+/// A decoded Frame.
+///
+/// The optional values will be `None` if a decode was not complete, and did
+/// not decode the associated property. This allows you to inspect the parts
+/// that could be decoded, before reading more.
+/// 
+/// # Example
+/// ```
+/// let buf = &[0b10100010, 0b00000011, 0b00000001, 0b00000010, 0b00000011];
+/// let mut f = Frame::empty();
+/// f.decode(buf);
+/// ```
+#[derive(Debug, PartialEq)]
 pub struct Frame<'buf> {
+    /// The head section of a frame.
     pub head: Option<Head>,
+    /// An optional mask key to apply over the payload.
     pub mask: Option<[u8; 4]>,
+    /// The payload section of a frame.
+    ///
+    /// An empty payload is represented as `Some(&[])`.
     pub payload: Option<&'buf [u8]>,
 }
 
 impl<'buf> Frame<'buf> {
+    /// Creates a new `Frame`.
     pub const fn empty() -> Self {
         Self {
             head: None,
@@ -71,6 +98,7 @@ impl<'buf> Frame<'buf> {
             payload: None,
         }
     }
+    /// Try to decode a buffer of bytes into this `Frame`.
     pub fn decode(&mut self, buf: &'buf [u8]) -> Status {
         let mut bytes = Bytes::new(buf);
 
