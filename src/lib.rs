@@ -1,5 +1,24 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+//! # ws-frame
+//! 
+//! A library for decoding WebSocket
+//! ([RFC6455](https://tools.ietf.org/html/rfc6455)) frames.
+//! 
+//! # Example
+//! ```
+//! use ws_frame::{Frame, Opcode};
+//! 
+//! let buf = [0b10100010, 0b00000001, 0b00000010];
+//! let mut f = Frame::empty();
+//! 
+//! if f.decode(&buf).is_complete() {
+//!     if Opcode::Ping == f.head.unwrap().op {
+//!         println!("Pong!")
+//!     }
+//! }
+//! ```
+
 #[cfg(feature = "std")]
 extern crate std as core;
 
