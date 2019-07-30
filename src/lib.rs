@@ -26,11 +26,41 @@ macro_rules! unwrap {
 #[derive(Debug, PartialEq)]
 pub enum Status {
     /// The completed result.
-    /// 
+    ///
     /// Contains the amount of bytes decoded.
     Complete(usize),
     /// A partial result.
     Partial,
+}
+
+impl Status {
+    /// Convenience method to check if status is complete.
+    #[inline]
+    pub fn is_complete(&self) -> bool {
+        match *self {
+            Status::Complete(..) => true,
+            Status::Partial => false,
+        }
+    }
+
+    /// Convenience method to check if status is partial.
+    #[inline]
+    pub fn is_partial(&self) -> bool {
+        match *self {
+            Status::Complete(..) => false,
+            Status::Partial => true,
+        }
+    }
+
+    /// Convenience method to unwrap a Complete value. Panics if the status is
+    /// partial.
+    #[inline]
+    pub fn unwrap(self) -> usize {
+        match self {
+            Status::Complete(len) => len,
+            Status::Partial => panic!("Tried to unwrap Status::Partial"),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -70,12 +100,22 @@ pub struct Head {
 /// The optional values will be `None` if a decode was not complete, and did
 /// not decode the associated property. This allows you to inspect the parts
 /// that could be decoded, before reading more.
-/// 
+///
 /// # Example
 /// ```
-/// let buf = &[0b10100010, 0b00000011, 0b00000001, 0b00000010, 0b00000011];
+/// use ws_frame::Frame;
+/// 
+/// let buf = &[0b10000010, 0b00000001];
 /// let mut f = Frame::empty();
-/// f.decode(buf);
+/// 
+/// if f.decode(buf).is_partial() {
+///     match f.head {
+///         Some(head) => assert_eq!([false; 3], head.rsv),
+///         None => {
+///             // read more and decode again
+///         }
+///     }
+/// }
 /// ```
 #[derive(Debug, PartialEq)]
 pub struct Frame<'buf> {
