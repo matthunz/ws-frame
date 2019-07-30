@@ -1,3 +1,6 @@
+use byteorder::{BigEndian, ByteOrder};
+use std::convert::TryInto;
+
 mod iter;
 use iter::Bytes;
 
@@ -22,15 +25,19 @@ pub struct Head {
 }
 
 #[derive(Default)]
-pub struct Frame {
+pub struct Frame<'buf> {
     pub head: Option<Head>,
+    pub payload: Option<&'buf [u8]>,
 }
 
-impl Frame {
+impl<'buf> Frame<'buf> {
     pub const fn empty() -> Self {
-        Self { head: None }
+        Self {
+            head: None,
+            payload: None,
+        }
     }
-    pub fn decode(&mut self, buf: &[u8]) -> Status {
+    pub fn decode(&mut self, buf: &'buf [u8]) -> Status {
         let mut bytes = Bytes::new(buf);
 
         let first = unwrap!(bytes.next());
@@ -47,7 +54,18 @@ impl Frame {
         });
 
         let second = unwrap!(bytes.next());
-        let has_mask = Some(first_bit(second));
+
+        let len = match second & 0x3F {
+            126 => unwrap!(bytes.slice_to(4).map(BigEndian::read_u64)),
+            // TODO validate most-sig bit == 0
+            127 => unwrap!(bytes.slice_to(8).map(BigEndian::read_u64)),
+            l => l as u64,
+        };
+
+
+        if !first_bit(second) {   
+            self.payload = Some(unwrap!(bytes.slice_to(len.try_into().unwrap())));
+        }
 
         Status::Complete(bytes.pos())
     }
@@ -64,12 +82,13 @@ mod tests {
 
     #[test]
     fn it_works() {
-        const BYTES: &[u8] = &[0b10100010, 0b10000011];
+        const BYTES: &[u8] = &[0b10100010, 0b00000011, 0b00000001, 0b00000010, 0b00000011];
         let mut f = Frame::empty();
         assert_eq!(Status::Complete(BYTES.len()), f.decode(BYTES));
 
         let head = f.head.unwrap();
         assert!(head.finished);
         assert_eq!([false, true, false], head.rsv);
+        assert_eq!(3, f.payload.unwrap().len());
     }
 }

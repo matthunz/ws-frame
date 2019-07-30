@@ -10,7 +10,7 @@ impl<'a> Bytes<'a> {
     pub fn pos(&self) -> usize {
         self.pos
     }
-    pub fn slice_to(&mut self, end: usize) -> Option<&[u8]> {
+    pub fn slice_to(&mut self, end: usize) -> Option<&'a [u8]> {
         let start = self.pos;
         self.pos += end;
         self.slice.get(start..self.pos)

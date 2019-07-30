@@ -8,3 +8,4 @@ edition = "2018"
 name = "ws_frame"
 
 [dependencies]
+byteorder = "1.3.2"
