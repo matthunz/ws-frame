@@ -7,5 +7,9 @@ edition = "2018"
 [lib]
 name = "ws_frame"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 byteorder = "1.3.2"

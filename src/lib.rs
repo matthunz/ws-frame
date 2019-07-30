@@ -1,5 +1,10 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "std")]
+extern crate std as core;
+
 use byteorder::{BigEndian, ByteOrder};
-use std::convert::TryInto;
+use core::convert::TryInto;
 
 mod iter;
 use iter::Bytes;
