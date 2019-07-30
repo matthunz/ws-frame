@@ -1,8 +1,14 @@
 [package]
 name = "ws-frame"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Matt Hunzinger <matthunz2@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "A small, zero-copy WebSocket decoder."
+repository = "https://github.com/matthunz/ws-frame"
+documentation = "https://docs.rs/ws-frame"
+keywords = ["websocket", "ws", "decoder", "no_std"]
+categories = ["network-programming", "no-std", "web-programming"]
 
 [lib]
 name = "ws_frame"
