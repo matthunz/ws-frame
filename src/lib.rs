@@ -27,6 +27,7 @@ pub struct Head {
 #[derive(Default)]
 pub struct Frame<'buf> {
     pub head: Option<Head>,
+    pub mask: Option<[u8; 4]>,
     pub payload: Option<&'buf [u8]>,
 }
 
@@ -34,6 +35,7 @@ impl<'buf> Frame<'buf> {
     pub const fn empty() -> Self {
         Self {
             head: None,
+            mask: None,
             payload: None,
         }
     }
@@ -54,7 +56,6 @@ impl<'buf> Frame<'buf> {
         });
 
         let second = unwrap!(bytes.next());
-
         let len = match second & 0x3F {
             126 => unwrap!(bytes.slice_to(4).map(BigEndian::read_u64)),
             // TODO validate most-sig bit == 0
@@ -62,11 +63,13 @@ impl<'buf> Frame<'buf> {
             l => l as u64,
         };
 
-
-        if !first_bit(second) {   
-            self.payload = Some(unwrap!(bytes.slice_to(len.try_into().unwrap())));
+        if first_bit(second) {
+            let mut mask = [0; 4];
+            mask.copy_from_slice(unwrap!(bytes.slice_to(4)));
+            self.mask = Some(mask);
         }
 
+        self.payload = Some(unwrap!(bytes.slice_to(len.try_into().unwrap())));
         Status::Complete(bytes.pos())
     }
 }
