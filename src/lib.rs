@@ -19,12 +19,39 @@ pub enum Status {
     Partial,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Opcode {
+    Continue,
+    Text,
+    Binary,
+    Close,
+    Ping,
+    Pong,
+    Reserved,
+}
+
+impl From<u8> for Opcode {
+    fn from(opcode: u8) -> Opcode {
+        match opcode {
+            0 => Opcode::Continue,
+            1 => Opcode::Text,
+            2 => Opcode::Binary,
+            8 => Opcode::Close,
+            9 => Opcode::Ping,
+            10 => Opcode::Pong,
+            _ => Opcode::Reserved,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Head {
+    pub op: Opcode,
     pub finished: bool,
     pub rsv: [bool; 3],
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Frame<'buf> {
     pub head: Option<Head>,
     pub mask: Option<[u8; 4]>,
@@ -51,6 +78,7 @@ impl<'buf> Frame<'buf> {
         }
 
         self.head = Some(Head {
+            op: Opcode::from(first & 0xF),
             finished: first_bit(first),
             rsv,
         });
