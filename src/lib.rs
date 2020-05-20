@@ -1,17 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 //! # ws-frame
-//! 
+//!
 //! A library for decoding WebSocket
 //! ([RFC6455](https://tools.ietf.org/html/rfc6455)) frames.
-//! 
+//!
 //! # Example
 //! ```
 //! use ws_frame::{Frame, Opcode};
-//! 
+//!
 //! let buf = [0b10100010, 0b00000001, 0b00000010];
 //! let mut f = Frame::empty();
-//! 
+//!
 //! if f.decode(&buf).is_complete() {
 //!     if Opcode::Ping == f.head.unwrap().op {
 //!         println!("Pong!")
@@ -23,7 +23,6 @@
 extern crate std as core;
 
 use byteorder::{BigEndian, ByteOrder};
-use core::convert::TryInto;
 
 mod iter;
 use iter::Bytes;
@@ -82,7 +81,7 @@ impl Status {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Opcode {
     Continue,
     Text,
@@ -123,10 +122,10 @@ pub struct Head {
 /// # Example
 /// ```
 /// use ws_frame::Frame;
-/// 
+///
 /// let buf = &[0b10000010, 0b00000001];
 /// let mut f = Frame::empty();
-/// 
+///
 /// if f.decode(buf).is_partial() {
 ///     match f.head {
 ///         Some(head) => assert_eq!([false; 3], head.rsv),
@@ -137,7 +136,7 @@ pub struct Head {
 /// }
 /// ```
 #[derive(Debug, PartialEq)]
-pub struct Frame<'buf> {
+pub struct Frame {
     /// The head section of a frame.
     pub head: Option<Head>,
     /// An optional mask key to apply over the payload.
@@ -145,16 +144,16 @@ pub struct Frame<'buf> {
     /// The payload section of a frame.
     ///
     /// An empty payload is represented as `Some(&[])`.
-    pub payload: Option<&'buf [u8]>,
+    pub payload_len: Option<u64>,
 }
 
-impl<'buf> Frame<'buf> {
+impl<'buf> Frame {
     /// Creates a new `Frame`.
     pub const fn empty() -> Self {
         Self {
             head: None,
             mask: None,
-            payload: None,
+            payload_len: None,
         }
     }
     /// Try to decode a buffer of bytes into this `Frame`.
@@ -176,12 +175,12 @@ impl<'buf> Frame<'buf> {
         });
 
         let second = unwrap!(bytes.next());
-        let len = match second & 0x3F {
+        self.payload_len = Some(match second & 0x3F {
             126 => unwrap!(bytes.slice_to(4).map(BigEndian::read_u64)),
             // TODO validate most-sig bit == 0
             127 => unwrap!(bytes.slice_to(8).map(BigEndian::read_u64)),
             l => l as u64,
-        };
+        });
 
         if first_bit(second) {
             let mut mask = [0; 4];
@@ -189,7 +188,6 @@ impl<'buf> Frame<'buf> {
             self.mask = Some(mask);
         }
 
-        self.payload = Some(unwrap!(bytes.slice_to(len.try_into().unwrap())));
         Status::Complete(bytes.pos())
     }
 }
@@ -207,11 +205,16 @@ mod tests {
     fn it_works() {
         const BYTES: &[u8] = &[0b10100010, 0b00000011, 0b00000001, 0b00000010, 0b00000011];
         let mut f = Frame::empty();
-        assert_eq!(Status::Complete(BYTES.len()), f.decode(BYTES));
+        let used = f.decode(BYTES);
 
         let head = f.head.unwrap();
         assert!(head.finished);
         assert_eq!([false, true, false], head.rsv);
-        assert_eq!(3, f.payload.unwrap().len());
+        assert_eq!(3, f.payload_len.unwrap());
+
+        assert_eq!(
+            Status::Complete(BYTES.len() - f.payload_len.unwrap() as usize),
+            used
+        );
     }
 }
