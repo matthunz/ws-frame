@@ -7,31 +7,53 @@
 //!
 //! # Example
 //! ```
+//! # fn main() -> Result<(), ws_frame::Error> {
 //! use ws_frame::{Frame, Opcode};
 //!
 //! let buf = [0b10100010, 0b00000001, 0b00000010];
 //! let mut f = Frame::empty();
 //!
-//! if f.decode(&buf).is_complete() {
+//! if f.decode(&buf)?.is_complete() {
 //!     if Opcode::Ping == f.head.unwrap().op {
 //!         println!("Pong!")
 //!     }
 //! }
+//! # Ok(())
+//! # }
 //! ```
 
 #[cfg(feature = "std")]
 extern crate std as core;
 
 use byteorder::{BigEndian, ByteOrder};
+use core::fmt::{Display, Formatter};
 
 mod iter;
 use iter::Bytes;
+
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    LengthTooLong,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), core::fmt::Error> {
+        let message = match self {
+            Self::LengthTooLong => "Payload length is too long",
+        };
+
+        write!(f, "{}", message)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
 
 macro_rules! unwrap {
     ($e:expr) => {
         match $e {
             Some(t) => t,
-            None => return Status::Partial,
+            None => return Ok(Status::Partial),
         }
     };
 }
@@ -121,12 +143,13 @@ pub struct Head {
 ///
 /// # Example
 /// ```
+/// # fn main() -> Result<(), ws_frame::Error> {
 /// use ws_frame::Frame;
 ///
 /// let buf = &[0b10000010, 0b00000001];
 /// let mut f = Frame::empty();
 ///
-/// if f.decode(buf).is_partial() {
+/// if f.decode(buf)?.is_partial() {
 ///     match f.head {
 ///         Some(head) => assert_eq!([false; 3], head.rsv),
 ///         None => {
@@ -134,6 +157,8 @@ pub struct Head {
 ///         }
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, PartialEq)]
 pub struct Frame {
@@ -157,7 +182,7 @@ impl<'buf> Frame {
         }
     }
     /// Try to decode a buffer of bytes into this `Frame`.
-    pub fn decode(&mut self, buf: &'buf [u8]) -> Status {
+    pub fn decode(&mut self, buf: &'buf [u8]) -> Result<Status, Error> {
         let mut bytes = Bytes::new(buf);
 
         let first = unwrap!(bytes.next());
@@ -177,8 +202,14 @@ impl<'buf> Frame {
         let second = unwrap!(bytes.next());
         self.payload_len = Some(match second & 0x7F {
             126 => unwrap!(bytes.slice_to(4).map(BigEndian::read_u64)),
-            // TODO validate most-sig bit == 0
-            127 => unwrap!(bytes.slice_to(8).map(BigEndian::read_u64)),
+            127 => {
+                let len = unwrap!(bytes.slice_to(8).map(BigEndian::read_u64));
+                if len & 0x8000_0000_0000_0000 != 0 {
+                    return Err(Error::LengthTooLong);
+                }
+
+                len
+            }
             l => l as u64,
         });
 
@@ -188,7 +219,7 @@ impl<'buf> Frame {
             self.mask = Some(mask);
         }
 
-        Status::Complete(bytes.pos())
+        Ok(Status::Complete(bytes.pos()))
     }
 }
 
@@ -202,13 +233,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn it_works() -> Result<(), Error> {
         const BYTES: &[u8] = &[0b10100010, 0b00000011, 0b00000001, 0b00000010, 0b00000011];
         let mut f = Frame::empty();
-        let used = f.decode(BYTES);
+        let used = f.decode(BYTES)?;
 
         let head = f.head.unwrap();
         assert!(head.finished);
+        assert_eq!(head.op, Opcode::Binary);
         assert_eq!([false, true, false], head.rsv);
         assert_eq!(3, f.payload_len.unwrap());
 
@@ -216,14 +248,46 @@ mod tests {
             Status::Complete(BYTES.len() - f.payload_len.unwrap() as usize),
             used
         );
+
+        Ok(())
     }
 
     #[test]
-    fn payload_length() {
-        const BYTES: &[u8] = &[0b10100010, 0b01100100];
+    fn payload_length() -> Result<(), Error> {
+        const BYTES: &[u8] = &[0b10000010, 0b01100100];
         let mut f = Frame::empty();
-        f.decode(BYTES);
+        let used = f.decode(BYTES)?;
 
+        assert_eq!(used, Status::Complete(2));
         assert_eq!(f.payload_len, Some(100));
+
+        Ok(())
+    }
+
+    #[test]
+    fn max_payload_length() -> Result<(), Error> {
+        const BYTES: &[u8] = &[
+            0b10000010, 0b01111111, 0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
+            0b11111111, 0b11111111, 0b11111111,
+        ];
+        let mut f = Frame::empty();
+        let used = f.decode(BYTES)?;
+
+        assert_eq!(used, Status::Complete(10));
+        assert_eq!(f.payload_len, Some(0x7fff_ffff_ffff_ffff));
+
+        Ok(())
+    }
+
+    #[test]
+    fn payload_length_error() {
+        const BYTES: &[u8] = &[
+            0b10100010, 0b01111111, 0b10000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+            0b00000000, 0b00000000, 0b00000000,
+        ];
+        let mut f = Frame::empty();
+        let used = f.decode(BYTES);
+
+        assert_eq!(used, Err(Error::LengthTooLong));
     }
 }
