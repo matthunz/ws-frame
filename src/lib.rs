@@ -143,7 +143,7 @@ pub struct Frame {
     pub mask: Option<[u8; 4]>,
     /// The payload section of a frame.
     ///
-    /// An empty payload is represented as `Some(&[])`.
+    /// An empty payload is represented as `Some(0)`.
     pub payload_len: Option<u64>,
 }
 
