@@ -175,7 +175,7 @@ impl<'buf> Frame {
         });
 
         let second = unwrap!(bytes.next());
-        self.payload_len = Some(match second & 0x3F {
+        self.payload_len = Some(match second & 0x7F {
             126 => unwrap!(bytes.slice_to(4).map(BigEndian::read_u64)),
             // TODO validate most-sig bit == 0
             127 => unwrap!(bytes.slice_to(8).map(BigEndian::read_u64)),
@@ -216,5 +216,14 @@ mod tests {
             Status::Complete(BYTES.len() - f.payload_len.unwrap() as usize),
             used
         );
+    }
+
+    #[test]
+    fn payload_length() {
+        const BYTES: &[u8] = &[0b10100010, 0b01100100];
+        let mut f = Frame::empty();
+        f.decode(BYTES);
+
+        assert_eq!(f.payload_len, Some(100));
     }
 }
