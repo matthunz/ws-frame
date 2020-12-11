@@ -89,7 +89,7 @@ pub enum Opcode {
     Close,
     Ping,
     Pong,
-    Reserved,
+    Reserved(u8),
 }
 
 impl From<u8> for Opcode {
@@ -101,7 +101,8 @@ impl From<u8> for Opcode {
             8 => Opcode::Close,
             9 => Opcode::Ping,
             10 => Opcode::Pong,
-            _ => Opcode::Reserved,
+            value if value < 16 => Opcode::Reserved(value),
+            _ => panic!("Invalid opcode"),
         }
     }
 }
@@ -216,5 +217,23 @@ mod tests {
             Status::Complete(BYTES.len() - f.payload_len.unwrap() as usize),
             used
         );
+    }
+
+    #[test]
+    fn opcodes() {
+        assert_eq!(Opcode::from(0), Opcode::Continue);
+        assert_eq!(Opcode::from(1), Opcode::Text);
+        assert_eq!(Opcode::from(2), Opcode::Binary);
+        assert_eq!(Opcode::from(8), Opcode::Close);
+        assert_eq!(Opcode::from(9), Opcode::Ping);
+        assert_eq!(Opcode::from(10), Opcode::Pong);
+
+        for op in (3..8).chain(11..16) {
+            assert_eq!(Opcode::from(op), Opcode::Reserved(op));
+        }
+
+        for op in 16..=255 {
+            assert!(std::panic::catch_unwind(|| Opcode::from(op)).is_err());
+        }
     }
 }
