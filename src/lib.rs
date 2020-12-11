@@ -147,7 +147,7 @@ pub struct Frame {
     pub payload_len: Option<u64>,
 }
 
-impl<'buf> Frame {
+impl Frame {
     /// Creates a new `Frame`.
     pub const fn empty() -> Self {
         Self {
@@ -157,7 +157,7 @@ impl<'buf> Frame {
         }
     }
     /// Try to decode a buffer of bytes into this `Frame`.
-    pub fn decode(&mut self, buf: &'buf [u8]) -> Status {
+    pub fn decode(&mut self, buf: &[u8]) -> Status {
         let mut bytes = Bytes::new(buf);
 
         let first = unwrap!(bytes.next());
